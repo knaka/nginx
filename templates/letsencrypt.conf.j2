@@ -1,0 +1,12 @@
+{% for hostname in hostnames %}
+server {
+{% include '_common.conf.j2' %}
+  server_name {{hostname}};
+  listen 80;
+  root /usr/share/nginx/html/;
+  location /.well-known/acme-challenge/ {}
+  location / {
+    return 301 https://$server_name$request_uri;
+  }
+}
+{% endfor %}

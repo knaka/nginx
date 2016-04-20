@@ -1,0 +1,79 @@
+---
+
+- apt: name={{item}} state=present
+  with_items:
+    - git
+    - nginx
+- file: dest=/etc/nginx/sites-enabled/default state=absent
+## 80 番ポートは Let's Encrypt 専用とする
+- template:
+    src: letsencrypt.conf.j2
+    dest: /etc/nginx/sites-available/letsencrypt.conf
+    mode: 0644
+  notify: "Restart Nginx"
+- file:
+    src: /etc/nginx/sites-available/letsencrypt.conf
+    dest: /etc/nginx/sites-enabled/letsencrypt.conf
+    state: link
+- name: Let's Encrypt is installed
+  git:
+    repo: https://github.com/letsencrypt/letsencrypt.git
+    dest: /opt/letsencrypt
+    version: HEAD
+    update: no
+- copy:
+    content: --domain {{hostnames | join(" --domain ")}}
+    dest: /etc/letsencrypt-options.txt
+  notify: "Initialize Let's Encrypt"
+- stat: path=/etc/letsencrypt/live/
+  register: stat_certdir
+- command: /bin/true
+  notify: "Initialize Let's Encrypt"
+  when: stat_certdir.stat.isdir is not defined or not stat_certdir.stat.isdir
+- meta: flush_handlers # Do it before configuring TLS which requires certs
+- copy:
+    content: |
+      #!/bin/sh
+      /opt/letsencrypt/letsencrypt-auto renew \
+       --force-renew
+      service nginx restart
+    dest: /usr/local/bin/letsencrypt-renew
+    mode: 0755
+- cron:
+    name: Let's Encrypt renewal task
+    job: "/usr/local/bin/letsencrypt-renew"
+    # dom: 1
+    dow: 0
+    hour: 0
+    minute: 0
+# SSL/TLS を主とする
+- name: Get installed version of Nginx
+  shell: "/usr/sbin/nginx -v"
+  changed_when: false
+  always_run: yes
+  register: _nginx_version
+# - debug: msg="d0 {{_nginx_version}}"
+- name: Create nginx_version variable
+  set_fact:
+    nginx_version: "{{_nginx_version.stderr.split()[2].split('/')[1]}}"
+# - debug: msg="d0 {{nginx_version|version_compare('1.0', '>=')}}"
+- shell: cp -a /usr/share/nginx/html/ /usr/share/nginx/html-{{item}}/
+  args:
+    creates: "/usr/share/nginx/html-{{item}}/"
+  with_items: "{{hostnames}}"
+- name: Configuration directories for each site
+  file:
+    path: /etc/nginx/sites-available/{{item}}.d/
+    state: directory
+    mode: 0755
+  with_items: "{{hostnames}}"
+- template:
+    src: tls.conf.j2
+    dest: /etc/nginx/sites-available/tls.conf
+    mode: 0644
+  notify:
+    - "Restart Nginx"
+- file:
+    src: /etc/nginx/sites-available/tls.conf
+    dest: /etc/nginx/sites-enabled/tls.conf
+    state: link

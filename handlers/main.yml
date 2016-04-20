@@ -1,0 +1,14 @@
+---
+
+- name: Restart Nginx
+  service: name=nginx state=restarted
+- name: Initialize Let's Encrypt
+  shell: |
+    /opt/letsencrypt/letsencrypt-auto certonly \
+     --force \
+     --webroot \
+     --webroot-path /usr/share/nginx/html/ \
+     $(cat /etc/letsencrypt-options.txt) \
+     --email {{email}} \
+     --agree-tos
+  notify: "Restart Nginx"

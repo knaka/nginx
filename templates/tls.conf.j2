@@ -1,0 +1,11 @@
+{% for hostname in hostnames %}
+server {
+{% include '_common.conf.j2' %}
+{% include '_tls.conf.j2' %}
+  server_name {{hostname}};
+  root /usr/share/nginx/html-{{hostname}}/;
+  ssl_certificate /etc/letsencrypt/live/{{hostnames[0]}}/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/{{hostnames[0]}}/privkey.pem;
+  include /etc/nginx/sites-available/{{hostname}}.d/*.conf;
+}
+{% endfor %}
